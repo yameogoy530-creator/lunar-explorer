@@ -129,7 +129,10 @@ analyzeBtn.addEventListener("click", async () => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || `Erreur HTTP ${response.status}`);
+      const message = data.details
+        ? `${data.error} (${data.details})`
+        : data.error || `Erreur HTTP ${response.status}`;
+      throw new Error(message);
     }
 
     renderResults(data.result);
