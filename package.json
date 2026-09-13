@@ -1,0 +1,12 @@
+{
+  "name": "lunar-explorer",
+  "version": "1.0.0",
+  "description": "Exploration interactive de la Lune assistée par le modèle NASA-IBM Lunar Foundation Model.",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}

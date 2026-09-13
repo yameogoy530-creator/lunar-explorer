@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lunar Explorer — Analyse IA de la surface lunaire</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <h1>Lunar Explorer</h1>
+          <p>Cartographie IA de la surface lunaire — NASA · IBM</p>
+        </div>
+      </div>
+      <div class="header-status" id="apiStatus" data-state="idle">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-label">Modèle prêt</span>
+      </div>
+    </header>
+
+    <main class="app-main">
+
+      <section class="map-panel" aria-label="Carte de la Lune">
+        <div id="map"></div>
+        <div class="map-hint">Clique sur la surface pour lancer une analyse IA de la zone</div>
+      </section>
+
+      <aside class="control-panel" aria-label="Panneau d'analyse">
+
+        <div class="panel-block">
+          <h2>Zone sélectionnée</h2>
+          <dl class="coord-grid">
+            <div>
+              <dt>Latitude</dt>
+              <dd id="coordLat">—</dd>
+            </div>
+            <div>
+              <dt>Longitude</dt>
+              <dd id="coordLng">—</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel-block">
+          <button id="analyzeBtn" class="btn-primary" disabled>
+            Lancer l'analyse IA
+          </button>
+          <p class="panel-note">Le modèle NASA-IBM identifie les structures géologiques (cratères, régolithe, ombres, reliefs) de la zone choisie.</p>
+        </div>
+
+        <div class="panel-block results-block" id="resultsBlock">
+          <h2>Résultat de l'analyse</h2>
+          <div id="resultsContent" class="results-content">
+            <p class="placeholder">Aucune analyse pour le moment. Sélectionne un point sur la carte, puis lance l'analyse.</p>
+          </div>
+        </div>
+
+      </aside>
+
+    </main>
+
+    <footer class="app-footer">
+      Tuiles lunaires : NASA / GSFC / Arizona State University (LROC WAC) · Modèle : NASA-IBM Lunar Foundation Model (Hugging Face)
+    </footer>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
