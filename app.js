@@ -128,9 +128,13 @@ analyzeBtn.addEventListener("click", async () => {
 
     const data = await response.json();
 
-    if (!response.ok) {
-      const message = data.details
-        ? `${data.error} (${data.details})`
+        if (!response.ok) {
+      const detailsText =
+        data.details && typeof data.details === "object"
+          ? JSON.stringify(data.details)
+          : data.details;
+      const message = detailsText
+        ? `${data.error} (${detailsText})`
         : data.error || `Erreur HTTP ${response.status}`;
       throw new Error(message);
     }
