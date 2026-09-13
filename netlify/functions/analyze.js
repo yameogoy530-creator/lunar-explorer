@@ -113,12 +113,17 @@ exports.handler = async (event) => {
       body: JSON.stringify({ result: data }),
     };
   } catch (err) {
+    // On logge l'erreur complète côté serveur (visible dans Netlify >
+    // Cloud compute > analyze > Logs) pour pouvoir diagnostiquer.
+    console.error("Erreur lors de l'appel à Hugging Face :", err);
+
     return {
       statusCode: 502,
       headers,
       body: JSON.stringify({
         error: "Impossible de contacter l'API Hugging Face.",
         details: err.message,
+        name: err.name,
       }),
     };
   }
