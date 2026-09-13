@@ -5,7 +5,7 @@
 // les variables d'environnement Netlify et est lu ici, côté serveur.
 
 const HF_MODEL = "nasa-ibm-ai4science/NASA-IBM-Lunar-Foundation-Model";
-const HF_API_URL = `https://api-inference.huggingface.co/models/${HF_MODEL}`;
+const HF_API_URL = `https://router.huggingface.co/hf-inference/models/${HF_MODEL}`;
 
 // Le frontend n'est autorisé à appeler cette fonction qu'en POST.
 exports.handler = async (event) => {
