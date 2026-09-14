@@ -128,7 +128,7 @@ analyzeBtn.addEventListener("click", async () => {
 
     const data = await response.json();
 
-        if (!response.ok) {
+    if (!response.ok) {
       const detailsText =
         data.details && typeof data.details === "object"
           ? JSON.stringify(data.details)
@@ -159,10 +159,30 @@ function renderResults(result) {
     return;
   }
 
-  // Le format exact dépend de la tâche exposée par le modèle sur
-  // Hugging Face (classification, segmentation, embeddings…). On affiche
-  // ici un rendu générique clé/valeur, à adapter une fois le schéma de
-  // sortie confirmé.
+  // Format typique d'une tâche "image-classification" Hugging Face :
+  // [{ label: "volcano", score: 0.83 }, ...]
+  const isClassificationList =
+    Array.isArray(result) &&
+    result.length > 0 &&
+    typeof result[0] === "object" &&
+    "label" in result[0] &&
+    "score" in result[0];
+
+  if (isClassificationList) {
+    resultsContent.innerHTML = result
+      .slice(0, 5)
+      .map(
+        (item) => `
+        <div class="result-item">
+          <span class="label">${escapeHtml(String(item.label))}</span>
+          <span class="value">${(item.score * 100).toFixed(1)}%</span>
+        </div>`
+      )
+      .join("");
+    return;
+  }
+
+  // Sinon, rendu générique clé/valeur (autres formats de tâche).
   const entries = Array.isArray(result)
     ? result.flatMap((r) => Object.entries(r))
     : Object.entries(result);
