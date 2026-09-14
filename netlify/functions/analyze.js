@@ -3,11 +3,61 @@
 // Proxy serverless entre le frontend et l'API d'inférence Hugging Face.
 // Le HF_TOKEN n'est JAMAIS exposé au navigateur : il vit uniquement dans
 // les variables d'environnement Netlify et est lu ici, côté serveur.
+//
+// Cette fonction fait deux choses :
+//   1. Récupère une vraie image de la zone cliquée via le WMS lunaire
+//      (wms2.im-ldi.com), côté serveur (pas de souci CORS).
+//   2. Envoie cette image à un modèle de classification d'image sur
+//      Hugging Face et renvoie le résultat au frontend.
+//
+// Le modèle NASA-IBM Lunar Foundation Model (et ses checkpoints dérivés
+// crater-detection / IMP-segmentation / ice-prospectivity) ne sont PAS
+// déployés sur un fournisseur d'inférence — ce sont des poids bruts
+// TerraTorch, exécutables seulement via du code Python dédié (voir la
+// discussion du guide). On utilise donc ici un classificateur d'image
+// généraliste, recommandé par la doc officielle Hugging Face pour la
+// tâche "image-classification" sur le fournisseur gratuit hf-inference.
+// Les résultats seront des catégories génériques (ImageNet), pas des
+// labels lunaires spécifiques.
+const HF_MODEL = "google/vit-base-patch16-224";
+// Solutions de repli si ce modèle affiche à son tour
+// "Model not supported by provider hf-inference" (l'écosystème évolue
+// vite) : "facebook/convnext-large-224" ou "Falconsai/nsfw_image_detection"
+// (ce dernier cité tel quel dans l'exemple officiel de la doc HF).
 
-const HF_MODEL = "nasa-ibm-ai4science/NASA-IBM-Lunar-Foundation-Model";
 const HF_API_URL = `https://router.huggingface.co/hf-inference/models/${HF_MODEL}`;
 
-// Le frontend n'est autorisé à appeler cette fonction qu'en POST.
+// --- Géométrie lunaire (voir aussi app.js) ------------------------------
+const MOON_RADIUS_M = 1737400;
+const DEG2RAD = Math.PI / 180;
+const MOON_WMS_URL = "https://wms2.im-ldi.com/";
+const MOON_WMS_SRS = "IAU2000:30166,9001,0,0";
+const TILE_SIZE_M = 51200; // 51.2 km de côté (échelle "contexte", ~100 m/px)
+const TILE_PIXELS = 256;
+
+function buildMoonTileUrl(lat, lng) {
+  const cx = lng * DEG2RAD * MOON_RADIUS_M;
+  const cy = lat * DEG2RAD * MOON_RADIUS_M;
+  const half = TILE_SIZE_M / 2;
+  const bbox = [cx - half, cy - half, cx + half, cy + half].join(",");
+
+  const params = new URLSearchParams({
+    LAYERS: "luna_wac_global",
+    FORMAT: "image/jpeg",
+    TRANSPARENT: "false",
+    SERVICE: "WMS",
+    VERSION: "1.1.1",
+    REQUEST: "GetMap",
+    STYLES: "",
+    SRS: MOON_WMS_SRS,
+    BBOX: bbox,
+    WIDTH: String(TILE_PIXELS),
+    HEIGHT: String(TILE_PIXELS),
+  });
+
+  return `${MOON_WMS_URL}?${params.toString()}`;
+}
+
 exports.handler = async (event) => {
   // --- CORS / méthode -------------------------------------------------
   const headers = {
@@ -53,26 +103,41 @@ exports.handler = async (event) => {
     };
   }
 
-  // payload attendu, par exemple :
-  // { lat: -8.97, lng: 24.4, zoom: 8, imageBase64: "..." }
-  // Le foundation model NASA-IBM (famille Prithvi / TerraTorch) attend en
-  // réalité des tuiles multi-bandes en entrée, pas de simples coordonnées :
-  // adapte le corps ci-dessous ("inputs") au format réellement exigé par
-  // le modèle une fois que tu as confirmé son schéma d'entrée sur sa
-  // fiche Hugging Face (voir la note dans le guide).
-  const hfBody = {
-    inputs: payload.imageBase64 || payload,
-    parameters: payload.parameters || {},
-  };
+  const { lat, lng } = payload;
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: "lat/lng manquants ou invalides." }),
+    };
+  }
 
   try {
+    // --- Étape 1 : récupérer une vraie image de la zone -----------------
+    const tileUrl = buildMoonTileUrl(lat, lng);
+    const tileResponse = await fetch(tileUrl);
+
+    if (!tileResponse.ok) {
+      return {
+        statusCode: 502,
+        headers,
+        body: JSON.stringify({
+          error: "Impossible de récupérer l'image de la zone (service WMS).",
+          details: `HTTP ${tileResponse.status}`,
+        }),
+      };
+    }
+
+    const imageBuffer = Buffer.from(await tileResponse.arrayBuffer());
+
+    // --- Étape 2 : envoyer cette image au modèle Hugging Face -----------
     const hfResponse = await fetch(HF_API_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${HF_TOKEN}`,
-        "Content-Type": "application/json",
+        "Content-Type": "image/jpeg",
       },
-      body: JSON.stringify(hfBody),
+      body: imageBuffer,
     });
 
     const rawText = await hfResponse.text();
@@ -115,13 +180,13 @@ exports.handler = async (event) => {
   } catch (err) {
     // On logge l'erreur complète côté serveur (visible dans Netlify >
     // Cloud compute > analyze > Logs) pour pouvoir diagnostiquer.
-    console.error("Erreur lors de l'appel à Hugging Face :", err);
+    console.error("Erreur lors de l'analyse :", err);
 
     return {
       statusCode: 502,
       headers,
       body: JSON.stringify({
-        error: "Impossible de contacter l'API Hugging Face.",
+        error: "Échec de l'analyse.",
         details: err.message,
         name: err.name,
       }),
