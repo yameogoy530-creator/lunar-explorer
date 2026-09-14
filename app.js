@@ -5,9 +5,6 @@
 const ANALYZE_ENDPOINT = "/.netlify/functions/analyze";
 
 // --- Carte Leaflet ---------------------------------------------------
-// La Lune n'a pas de CRS Web Mercator standard : on utilise EPSG:4326
-// (grille lat/lng simple) comme le fait la plupart des services WMS
-// planétaires (LROC, Moon Trek, QuickMap).
 const moonCRS = L.CRS.EPSG4326;
 
 const map = L.map("map", {
@@ -20,18 +17,6 @@ const map = L.map("map", {
 });
 
 // --- Fond de carte lunaire : vraies tuiles WMS (Lunaserv) --------------
-// Le service LROC vit désormais sur wms2.im-ldi.com (confirmé via
-// l'onglet Réseau du navigateur). Contrairement à un WMS terrestre
-// classique, Lunaserv exprime ses coordonnées dans une projection
-// cylindrique simple propre à la Lune, EN MÈTRES (pas en degrés), avec
-// un code SRS spécifique : IAU2000:30166,9001,0,0.
-//
-// On garde la carte Leaflet elle-même en lat/lng classique (EPSG:4326)
-// pour la logique de pan/zoom, mais on fournit à la couche WMS un CRS
-// "sur mesure" qui convertit chaque coordonnée lat/lng en mètres sur la
-// sphère lunaire (rayon moyen 1 737 400 m) avant de construire l'URL de
-// requête GetMap — c'est ce que Leaflet appelle en interne pour calculer
-// le paramètre BBOX.
 const MOON_RADIUS_M = 1737400;
 const DEG2RAD = Math.PI / 180;
 
@@ -61,13 +46,6 @@ const moonBounds = [
   [90, 180],
 ];
 map.setMaxBounds(moonBounds);
-
-// Si jamais ce service devient à son tour indisponible, un secours fiable
-// (image statique NASA, sans dépendance WMS) :
-//   L.imageOverlay(
-//     "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg",
-//     moonBounds
-//   ).addTo(map);
 
 // --- Sélection d'un point sur la carte --------------------------------
 let selectedLatLng = null;
@@ -121,8 +99,6 @@ analyzeBtn.addEventListener("click", async () => {
         lat: selectedLatLng.lat,
         lng: selectedLatLng.lng,
         zoom: map.getZoom(),
-        // Adapte ce payload au format d'entrée réel attendu par le modèle
-        // (voir la note dans le README / le guide fourni).
       }),
     });
 
@@ -139,7 +115,7 @@ analyzeBtn.addEventListener("click", async () => {
       throw new Error(message);
     }
 
-    renderResults(data.result);
+    renderResults(data.result, data.source);
     setStatus("idle", "Modèle prêt");
   } catch (err) {
     resultsContent.innerHTML = `
@@ -153,14 +129,20 @@ analyzeBtn.addEventListener("click", async () => {
   }
 });
 
-function renderResults(result) {
+function sourceBadgeHtml(source) {
+  if (source === "nasa-ibm-live") {
+    return `<div class="source-badge source-badge--live">🟢 Vrai modèle NASA-IBM (session live)</div>`;
+  }
+  return `<div class="source-badge source-badge--fallback">🟡 Modèle de secours (classification générale)</div>`;
+}
+
+function renderResults(result, source) {
   if (!result) {
     resultsContent.innerHTML = `<p class="placeholder">Aucun résultat renvoyé par le modèle.</p>`;
     return;
   }
+  const badge = source ? sourceBadgeHtml(source) : "";
 
-  // Format typique d'une tâche "image-classification" Hugging Face :
-  // [{ label: "volcano", score: 0.83 }, ...]
   const isClassificationList =
     Array.isArray(result) &&
     result.length > 0 &&
@@ -169,20 +151,21 @@ function renderResults(result) {
     "score" in result[0];
 
   if (isClassificationList) {
-    resultsContent.innerHTML = result
-      .slice(0, 5)
-      .map(
-        (item) => `
+    resultsContent.innerHTML =
+      badge +
+      result
+        .slice(0, 5)
+        .map(
+          (item) => `
         <div class="result-item">
           <span class="label">${escapeHtml(String(item.label))}</span>
           <span class="value">${(item.score * 100).toFixed(1)}%</span>
         </div>`
-      )
-      .join("");
+        )
+        .join("");
     return;
   }
 
-  // Sinon, rendu générique clé/valeur (autres formats de tâche).
   const entries = Array.isArray(result)
     ? result.flatMap((r) => Object.entries(r))
     : Object.entries(result);
@@ -192,17 +175,19 @@ function renderResults(result) {
     return;
   }
 
-  resultsContent.innerHTML = entries
-    .map(
-      ([key, value]) => `
+  resultsContent.innerHTML =
+    badge +
+    entries
+      .map(
+        ([key, value]) => `
       <div class="result-item">
         <span class="label">${escapeHtml(String(key))}</span>
         <span class="value">${escapeHtml(
           typeof value === "object" ? JSON.stringify(value) : String(value)
         )}</span>
       </div>`
-    )
-    .join("");
+      )
+      .join("");
 }
 
 function escapeHtml(str) {
