@@ -297,6 +297,26 @@ body::before {
   font-family: var(--font-mono);
   color: var(--gold);
 }
+.source-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.source-badge--live {
+  background: rgba(127, 191, 138, 0.14);
+  color: var(--success);
+  border: 1px solid rgba(127, 191, 138, 0.3);
+}
+
+.source-badge--fallback {
+  background: var(--gold-soft);
+  color: var(--gold);
+  border: 1px solid var(--panel-border-strong);
+}
 
 .result-error {
   color: var(--danger);
