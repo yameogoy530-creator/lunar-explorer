@@ -77,6 +77,77 @@ async function tryColabModel(imageBuffer) {
     return null;
   }
 }
-
 // Modèle de secours toujours disponible (classification généraliste).
-async function
+async function tryHuggingFaceModel(imageBuffer) {
+  const hfToken = process.env.HF_TOKEN;
+
+  try {
+    const response = await fetch(HF_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${hfToken}`,
+        "Content-Type": "image/jpeg",
+      },
+      body: imageBuffer,
+    });
+
+    if (!response.ok) {
+      console.log("Modèle de secours Hugging Face indisponible :", response.status);
+      return null;
+    }
+
+    return await response.json();
+  } catch (err) {
+    console.log("Erreur avec le modèle de secours :", err.message);
+    return null;
+  }
+}
+
+// Point d'entrée de la fonction Netlify.
+exports.handler = async (event) => {
+  try {
+    const { lat, lng } = event.queryStringParameters || {};
+
+    if (lat === undefined || lng === undefined) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Paramètres 'lat' et 'lng' requis." }),
+      };
+    }
+
+    const tileUrl = buildMoonTileUrl(parseFloat(lat), parseFloat(lng));
+    const tileResponse = await fetch(tileUrl);
+
+    if (!tileResponse.ok) {
+      return {
+        statusCode: 502,
+        body: JSON.stringify({ error: "Impossible de récupérer l'image de la zone (WMS)." }),
+      };
+    }
+
+    const imageBuffer = Buffer.from(await tileResponse.arrayBuffer());
+
+    let result = await tryColabModel(imageBuffer);
+    if (!result) {
+      result = await tryHuggingFaceModel(imageBuffer);
+    }
+
+    if (!result) {
+      return {
+        statusCode: 502,
+        body: JSON.stringify({ error: "Aucun modèle d'analyse n'est disponible pour le moment." }),
+      };
+    }
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(result),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message }),
+    };
+  }
+};
