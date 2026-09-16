@@ -78,6 +78,7 @@ async function tryColabModel(imageBuffer) {
   }
 }
 // Modèle de secours toujours disponible (classification généraliste).
+// Modèle de secours toujours disponible (classification généraliste).
 async function tryHuggingFaceModel(imageBuffer) {
   const hfToken = process.env.HF_TOKEN;
 
@@ -103,11 +104,27 @@ async function tryHuggingFaceModel(imageBuffer) {
   }
 }
 
-// Point d'entrée de la fonction Netlify.
+// Point d'entrée de la fonction Netlify — reçoit un POST JSON {lat, lng, zoom}.
 exports.handler = async (event) => {
   try {
-    const { lat, lng } = event.queryStringParameters || {};
+    if (event.httpMethod !== "POST") {
+      return {
+        statusCode: 405,
+        body: JSON.stringify({ error: "Méthode non autorisée, utilisez POST." }),
+      };
+    }
 
+    let payload;
+    try {
+      payload = JSON.parse(event.body || "{}");
+    } catch (e) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Corps de requête JSON invalide." }),
+      };
+    }
+
+    const { lat, lng } = payload;
     if (lat === undefined || lng === undefined) {
       return {
         statusCode: 400,
@@ -121,15 +138,21 @@ exports.handler = async (event) => {
     if (!tileResponse.ok) {
       return {
         statusCode: 502,
-        body: JSON.stringify({ error: "Impossible de récupérer l'image de la zone (WMS)." }),
+        body: JSON.stringify({
+          error: "Impossible de récupérer l'image de la zone (WMS).",
+          details: `Statut WMS : ${tileResponse.status}`,
+        }),
       };
     }
 
     const imageBuffer = Buffer.from(await tileResponse.arrayBuffer());
 
     let result = await tryColabModel(imageBuffer);
+    let source = "nasa-ibm-live";
+
     if (!result) {
       result = await tryHuggingFaceModel(imageBuffer);
+      source = "hf-fallback";
     }
 
     if (!result) {
@@ -142,12 +165,12 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(result),
+      body: JSON.stringify({ result, source }),
     };
   } catch (err) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
+      body: JSON.stringify({ error: "Erreur interne.", details: err.message }),
     };
   }
 };
